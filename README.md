@@ -1,72 +1,134 @@
 # Bipin
 
 **Software Engineering Student (B.Tech Computer Science '27) &bull; College of Engineering Munnar**  
-Specializing in backend systems, database concurrency, automated testing, and software reliability.
+*Focused on deterministic backend systems, database concurrency, automated test verification, and ML reliability.*
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=flat&logo=linkedin&logoColor=white)](https://linkedin.com/in/bipin-583)
 [![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white)](https://github.com/Bipin583)
 [![Email](https://img.shields.io/badge/Email-D14836?style=flat&logo=gmail&logoColor=white)](mailto:b64957853@gmail.com)
+[![Status](https://img.shields.io/badge/Status-Seeking%202027%20SWE%20Roles-success?style=flat)](#contact)
 
 ---
 
-## Technical Focus
+## Technical Philosophy
 
-I build deterministic backend systems where concurrency, transactional boundaries, and data integrity are enforced at the database level rather than through fragile application-layer assumptions. My work centers on high-integrity web platforms and reliability-focused developer tooling.
+I design software systems where critical invariants are guaranteed by **database locks and constraints** rather than optimistic application-layer checks, and developer tools where **machine learning models know when to abstain** rather than emit overconfident, incorrect predictions.
 
-* **Backend Architecture & APIs**: REST API design, transaction isolation, role-scoped multi-tenancy, rate limiting, and idempotent webhook handlers.
-* **Database Engineering**: PostgreSQL, schema migrations with Flyway, pessimistic row locking (`SELECT ... FOR UPDATE`), partial unique indexes, and audit logging with secret redaction.
-* **Testing & Verification**: Integration testing against containerized databases (Testcontainers), unit test isolation (JUnit 5, pytest), mutation testing, and CI gating.
-* **Software Reliability & ML**: Confidence calibration, epistemic uncertainty estimation, selective prediction, and regression test selection (RTS).
+* **Database-Level Invariants**: Race conditions occur in the gap between a read and a write. Invariants like bed allocation limits, payment idempotency, and application states belong in pessimistic row locks and partial unique indexes.
+* **Empirical Rigor & Honesty**: Developer tools and ML systems must transparently report abstention rates, feature constancy, and baseline wall-clock timings rather than claiming superficial savings.
+* **Zero-Mock Integration Testing**: Mocks hide entity/DDL mismatches and transaction rollback semantics. CI pipelines must validate behavior against real containerized PostgreSQL instances.
 
 ---
 
-## Featured Projects
+## Featured Systems
 
-### [HostelOps &mdash; Multi-Console Hostel Operations Platform](https://github.com/Bipin583/HostelHub-Hostel-Management-System)
+### 1. [HostelOps &mdash; Multi-Console Hostel Operations Platform](https://github.com/Bipin583/HostelHub-Hostel-Management-System)
 *Java 17 &bull; Spring Boot 3.5 &bull; PostgreSQL 17 &bull; Next.js 16 &bull; TypeScript 5.9 &bull; Docker &bull; Testcontainers*
 
-A full-lifecycle accommodation and finance management system for university campuses serving three discrete roles: students, wardens, and administrators.
+A complete campus accommodation and finance platform with discrete student, warden, and admin consoles, built to eliminate double allocations and payment race conditions at the database level.
 
-* **Database-Enforced Concurrency**: Eliminates room over-allocation using pessimistic row locks (`SELECT ... FOR UPDATE`) and partial unique indexes (`uq_allocations_active_student`, `uq_applications_one_pending`).
-* **Financial Integrity**: Money stored strictly as integer paise; payment settlement enforces two-phase row locking on attempt and invoice records with HMAC-SHA256 callback verification and idempotency keys (`uq_fee_payments_idempotency`).
-* **Security & Multi-Tenancy**: Memory-only access tokens paired with `httpOnly`, `Secure`, `SameSite=Strict` refresh cookies. Dynamic query scoping (`AccessScope`) isolates warden access across hostels at the database level.
-* **Rigorous Verification**: 232 unit tests and 127 integration test executions against real `postgres:17-alpine` instances managed via Testcontainers in GitHub Actions CI.
+```mermaid
+flowchart LR
+    subgraph Client["Next.js 16 (React 19 / TS 5.9)"]
+        UI["Three Consoles (Student / Warden / Admin)<br/>In-Memory JWT & httpOnly Cookie"]
+    end
+    subgraph SpringBoot["Spring Boot 3.5 Core"]
+        Auth["Spring Security 6<br/>IP Token-Bucket Rate Limiter"]
+        Scope["AccessScope Interceptor<br/>Multi-Tenant Hostel Isolation"]
+        Alloc["AllocationService<br/>SELECT ... FOR UPDATE"]
+        Pay["PaymentService<br/>HMAC-SHA256 & 2-Phase Lock"]
+    end
+    subgraph Postgres["PostgreSQL 17 (Flyway Managed)"]
+        DB1[("rooms<br/>Pessimistic Row Lock")]
+        DB2[("allocations<br/>uq_allocations_active_student")]
+        DB3[("fee_payments<br/>uq_fee_payments_idempotency")]
+    end
 
-### [ConfTest &mdash; Confidence-Calibrated Regression Test Selection](https://github.com/Bipin583/Conftest)
+    UI --> Auth --> Scope
+    Scope --> Alloc -->|Hold Row Lock| DB1
+    Alloc -->|Guarded Insert| DB2
+    Scope --> Pay -->|Verify & Lock Attempt| DB3
+```
+
+#### Core Architectural Guarantees:
+* **Pessimistic Row Locking (`SELECT ... FOR UPDATE`)**: Resolves bed allocation contention at the database row level. Avoids optimistic `@Version` retry storms and user-facing retries for short (~1ms), contended transactions.
+* **Partial Unique Indexes**: `uq_allocations_active_student` (`WHERE active`) and `uq_applications_one_pending` (`WHERE status = 'PENDING'`) ensure invariants hold even against direct SQL migrations or concurrent workers.
+* **Strict Integer Paise Currency**: Money is represented strictly as integer paise across database columns, Java DTOs, and TypeScript models, eliminating IEEE 754 floating-point rounding errors.
+* **Payment Settlement Two-Phase Lock**: Settlement acquires locks on the attempt record followed by the invoice row, verifying HMAC-SHA256 callback signatures and preventing duplicate crediting during partial settlements.
+* **In-Memory JWT + httpOnly Strict Cookie**: Access tokens live strictly in memory; refresh tokens are stored in `httpOnly`, `Secure`, `SameSite=Strict` cookies. No tokens in `localStorage`.
+* **Verified CI Suite**: **232 unit tests** passing in 11.2s; **127 integration executions** across 8 classes running against `postgres:17-alpine` via Testcontainers in GitHub Actions CI.
+
+---
+
+### 2. [ConfTest &mdash; Confidence-Calibrated Regression Test Selection](https://github.com/Bipin583/Conftest)
 *Python 3.11 &bull; FastAPI &bull; LightGBM &bull; Streamlit &bull; SQLite &bull; pytest &bull; GitHub Actions*
 
-A research-grade regression test selection (RTS) engine for Python CI pipelines that ranks test cases by calibrated failure risk and abstains to the full suite when uncertain.
+A regression test selection (RTS) engine for Python CI pipelines that frames test selection as a selective prediction problem under uncertainty, falling back to the full suite whenever uncertainty is high.
 
-* **Uncertainty-Aware Decision Engine**: Combines a 5-seed LightGBM ensemble with post-hoc probability calibration (Isotonic Regression) to measure epistemic disagreement and expected calibration error (ECE lowered from 0.0390 to 0.0242).
-* **Safe Fallback (`SAFE_FULL_SUITE`)**: Selects budget-constrained test subsets (`FAST_SELECTED`) only when the model is confident; automatically abstains and executes the entire suite on out-of-distribution diffs or high model variance.
-* **Empirical Validation**: Evaluated across 183 held-out commits (86,469 commit-test instances): achieved 100% failure recall (0 escapes) with a 3.11% execution count reduction and 0.0% wall-clock reduction due to a conservative 97.81% abstention rate.
-* **Developer Ecosystem**: Features a FastAPI service, Streamlit visual inspection dashboard, CLI tool, signed GitHub webhook handler, and automated CI reporting.
+```mermaid
+flowchart LR
+    PR["PR Diff / Commit"] --> Ext["AST, Dependency Graph<br/>& Churn Feature Extraction"]
+    Ext --> Ens["5-Seed LightGBM Ensemble<br/>Disagreement Variance"]
+    Ens --> Cal["Isotonic Calibrator<br/>ECE: 0.0390 -> 0.0242"]
+    Cal --> Pol{"Selective Policy Engine<br/>tau_conf & tau_abstain"}
+    Pol -->|Low Disagreement| Fast["FAST_SELECTED<br/>Budget-Matched Subset"]
+    Pol -->|Uncertain / OOD| Safe["SAFE_FULL_SUITE<br/>Abstain & Run All"]
+    Fast --> Exec["SafeTestExecutor<br/>Subprocess Tree Timeout"]
+    Safe --> Exec
+```
+
+#### Core Architectural Guarantees:
+* **Selective Prediction & Safe Fallback**: Traditional ML models in CI fail silently by omitting failing tests on unfamiliar diffs. ConfTest quantifies epistemic uncertainty via ensemble score variance and automatically falls back to `SAFE_FULL_SUITE` when uncertain.
+* **Post-Hoc Probability Calibration**: Uses Isotonic Regression to map raw classifier scores to calibrated probabilities, reducing Expected Calibration Error (ECE) from 0.0390 to 0.0242.
+* **Empirical Validation (183 Held-Out Commits, 86,469 Rows)**:
+  * **Failure Recall**: 100.00% (0 escaped test failures).
+  * **Test Count Reduction**: 3.11%.
+  * **Wall-Clock Reduction**: 0.0% (due to a conservative 97.81% abstention rate that preserves safety).
+  * **Scoring Latency**: 3.345 ms per 50 tests.
+* **Defensive Subprocess Execution**: `SafeTestExecutor` sanitizes pytest node IDs against flag/command injection, enforces strict process-tree execution timeouts, and terminates rogue worker trees.
+* **Complete Interface Ecosystem**: FastAPI REST API, Streamlit visual calibration dashboard, CLI, signed GitHub webhook handler, and automated GitHub Actions PR annotations.
 
 ---
 
-## Technical Proficiency
+## Engineering Invariants & Verified Evidence
 
-| Domain | Technologies & Frameworks |
+| Invariant / Property | HostelOps (Hostel Management) | ConfTest (Test Selection) |
+|---|---|---|
+| **Primary Guarantee** | Zero bed over-allocation; zero duplicate fee credits | Zero escaped test failures on held-out evaluation |
+| **Enforcement Mechanism** | PostgreSQL pessimistic row locks (`SELECT ... FOR UPDATE`) | Selective prediction policy (`SAFE_FULL_SUITE` fallback) |
+| **Secondary Defense** | Partial unique indexes (`WHERE active`, `WHERE pending`) | 5-seed ensemble disagreement variance thresholding |
+| **Financial / Metric Model** | Integer paise representation (no floating point) | Empirical ECE probability calibration (Isotonic Regression) |
+| **Execution Security** | Token bucket rate limiter `(user, IP)` + in-memory JWT | Node ID argument sanitizer + subprocess tree kill |
+| **Automated Verification** | 232 Unit Tests + 127 Testcontainers Integration Executions | 800+ Pytest Suite + Contract Tests + Label Integrity Script |
+| **CI/CD Pipeline** | GitHub Actions parallel matrix with Docker build | GitHub Actions RTS selector + PR comment reporter |
+
+---
+
+## Technical Skills
+
+| Layer | Technologies |
 |---|---|
-| **Languages** | Java (17/21), Python (3.11+), TypeScript, JavaScript, SQL |
-| **Backend & APIs** | Spring Boot 3, Spring Data JPA, Spring Security, FastAPI, REST, Pydantic |
-| **Frontend** | React 19, Next.js 16 (App Router), Vanilla CSS, HTML5 |
-| **Data & Persistence** | PostgreSQL, Flyway, SQLite (WAL mode), Hibernate, SQLAlchemy |
-| **DevOps & Infrastructure** | Docker, Docker Compose, GitHub Actions CI/CD, Maven, Linux |
-| **Testing & Quality** | JUnit 5, Testcontainers, AssertJ, pytest, pytest-cov, Ruff |
-| **ML & Reliability** | LightGBM, Scikit-learn, Calibration (ECE / Brier score), NetworkX, AST analysis |
+| **Core Languages** | Java (17/21), Python (3.11+), TypeScript, JavaScript, SQL |
+| **Backend & Services** | Spring Boot 3.5, Spring Data JPA, Spring Security 6, FastAPI, REST, Pydantic |
+| **Databases & Storage** | PostgreSQL 17, Flyway, SQLite (WAL mode), Hibernate (ddl-auto: none), SQLAlchemy |
+| **Frontend Architecture**| React 19, Next.js 16 (App Router), Vanilla CSS, Responsive UI Design |
+| **DevOps & Cloud** | Docker, Docker Compose, GitHub Actions CI/CD, Maven (Surefire/Failsafe), Linux |
+| **Testing & Quality** | JUnit 5, Testcontainers, AssertJ, pytest, pytest-cov, Ruff, Black, Static Analysis |
+| **Systems & Reliability** | Database Concurrency, Row-Level Locking, Idempotent APIs, Uncertainty Estimation, Calibration |
 
 ---
 
-## Engineering Principles
+## Professional Highlights & Practices
 
-1. **Database Guarantees Over Application Checks**: Race conditions live in the gap between a read and a write. Critical invariants belong in database locks and constraints.
-2. **Honest Metrics Over Inflated Claims**: In machine learning and developer tooling, transparently reporting abstention rates, feature constancy, and wall-clock baselines is essential for engineering trust.
-3. **Reproducible Test Environments**: Tests that pass only with mock databases hide transaction isolation and DDL bugs. Integration tests must run against real database instances in CI.
-4. **Security by Default**: Zero hardcoded fallback secrets, parameterized queries, strict CORS origins, in-memory tokens, and proactive secret redaction in audit feeds.
+* **Schema Drift CI Enforcement**: Using Flyway with `ddl-auto: none` and asserting entity/migration parity via `SchemaAgreementIT` so schema drift breaks CI rather than production.
+* **Audit Trail with Secret Redaction**: Custom Spring AOP aspect (`@Audited`) redacting `password|secret|token|credential` before writing JSON payload diffs to the audit table.
+* **Transparent Limitations**: Openly documenting model assumptions, constant training features, and wall-clock realities in RTS developer tooling.
 
 ---
 
-<p align="center">
-  <sub>Open to Software Engineering Internships and Graduate Roles (2027) &bull; Munnar / Kerala / Remote</sub>
-</p>
+## Contact & Links
+
+* **GitHub**: [@Bipin583](https://github.com/Bipin583)
+* **LinkedIn**: [linkedin.com/in/bipin-583](https://linkedin.com/in/bipin-583)
+* **Email**: [b64957853@gmail.com](mailto:b64957853@gmail.com)
+* **Location**: Kerala, India &bull; Open to On-site / Remote Internships and Full-Time Roles (2027)
